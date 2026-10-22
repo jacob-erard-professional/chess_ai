@@ -65,13 +65,66 @@ _PST = {
 }
 
 
+_KING_ENDGAME = [-50, -40, -30, -20, -20, -30, -40, -50,
+                 -30, -20, -10, 0, 0, -10, -20, -30,
+                 -30, -10, 20, 30, 30, 20, -10, -30,
+                 -30, -10, 30, 40, 40, 30, -10, -30,
+                 -30, -10, 30, 40, 40, 30, -10, -30,
+                 -30, -10, 20, 30, 30, 20, -10, -30,
+                 -30, -30, 0, 0, 0, 0, -30, -30,
+                 -50, -30, -30, -30, -30, -30, -30, -50]
+
+# Game phase: 24 with all pieces on the board, 0 with only kings and pawns.
+_PHASE = {chess.KNIGHT: 1, chess.BISHOP: 1, chess.ROOK: 2, chess.QUEEN: 4}
+FULL_PHASE = 24
+
+
+def _center_distance(square):
+    """Manhattan distance from the 2x2 centre: 0 on d4/e4/d5/e5, 6 in a corner."""
+    f, r = chess.square_file(square), chess.square_rank(square)
+    return max(3 - f, f - 4) + max(3 - r, r - 4)
+
+
+def _mop_up(strong_king, weak_king):
+    """Drive the lone king to the edge and bring our king closer."""
+    return 10 * _center_distance(weak_king) + 4 * (14 - chess.square_manhattan_distance(strong_king, weak_king))
+
+
 def evaluate(board):
-    """Centipawns for the side to move."""
-    score = 0
+    """Centipawns for the side to move.
+
+    Material plus piece-square tables. The king table blends from middlegame
+    to endgame as pieces come off. When one side has no pawns and is down at
+    least a rook in pieces, the stronger side also gets a mop-up bonus,
+    without which the search cannot find mates beyond its horizon.
+    """
+    score = phase = 0
+    pieces = {chess.WHITE: 0, chess.BLACK: 0}
+    pawns = {chess.WHITE: 0, chess.BLACK: 0}
+    kings = {}
     for square, piece in board.piece_map().items():
+        sign = 1 if piece.color == chess.WHITE else -1
         index = square ^ 56 if piece.color == chess.WHITE else square
-        value = VALUES[piece.piece_type] + _PST[piece.piece_type][index]
-        score += value if piece.color == chess.WHITE else -value
+        kind = piece.piece_type
+        if kind == chess.KING:
+            kings[piece.color] = square
+            continue
+        score += sign * (VALUES[kind] + _PST[kind][index])
+        phase += _PHASE.get(kind, 0)
+        if kind == chess.PAWN:
+            pawns[piece.color] += 1
+        else:
+            pieces[piece.color] += VALUES[kind]
+    phase = min(phase, FULL_PHASE)
+    for color, square in kings.items():
+        index = square ^ 56 if color == chess.WHITE else square
+        king = (_PST[chess.KING][index] * phase + _KING_ENDGAME[index] * (FULL_PHASE - phase)) // FULL_PHASE
+        score += king if color == chess.WHITE else -king
+    for strong in (chess.WHITE, chess.BLACK):
+        weak = not strong
+        if len(kings) == 2 and not pawns[weak] and pieces[strong] - pieces[weak] >= VALUES[chess.ROOK]:
+            bonus = _mop_up(kings[strong], kings[weak])
+            score += bonus if strong == chess.WHITE else -bonus
     return score if board.turn == chess.WHITE else -score
 
 

@@ -1,5 +1,6 @@
 import glob
 import json
+import random
 import unittest
 
 import chess
@@ -7,7 +8,7 @@ import chess
 from chessai.engine import (AlphaBetaPlayer, Game, GameOver, IllegalMove, PlayerInfo,
                             RandomPlayer, TimeControl, play_game, tcn)
 from chessai.engine.game import format_clock, parse_clocks
-from chessai.engine.search import Searcher
+from chessai.engine.search import MATE, Searcher, evaluate
 
 
 def played(moves, **kw):
@@ -189,11 +190,38 @@ class PlayersTest(unittest.TestCase):
         self.assertTrue(g.is_over)
         self.assertEqual(Game.from_chesscom(g.to_chesscom()).moves, g.moves)
 
-    def test_search_finds_mate_in_one_and_two(self):
-        move, _ = Searcher(2).search(chess.Board('6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1'))
-        self.assertEqual(move.uci(), 'a1a8')
+    def test_search_finds_mate_in_one(self):
+        move, score = Searcher(2).search(chess.Board('6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1'))
+        self.assertEqual((move.uci(), score), ('a1a8', MATE - 1))
         board = chess.Board('r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4')
         self.assertEqual(Searcher(2).search(board)[0].uci(), 'h5f7')
+
+    def test_search_finds_mate_in_two(self):
+        # Rd8+ Rxd8 Rxd8#: only the rook with a backup on the d-file mates
+        board = chess.Board('r5k1/5ppp/8/8/8/8/3R1PPP/3R2K1 w - - 0 1')
+        move, score = Searcher(3).search(board)
+        self.assertEqual(score, MATE - 3)
+        self.assertEqual(move.uci(), 'd2d8')
+        move, score = Searcher(3).search(board.mirror())
+        self.assertEqual(score, MATE - 3)
+
+    def test_converts_basic_endgames_against_random_defence(self):
+        for fen in ('7k/8/8/8/8/8/8/K5Q1 w - - 0 1', 'k7/8/8/8/8/8/8/3QK3 w - - 0 1',
+                    '7k/8/8/8/8/8/8/K5R1 w - - 0 1', '8/8/3k4/8/8/8/8/R3K3 w - - 0 1'):
+            for seed in range(3):
+                g = play_game(AlphaBetaPlayer(depth=4), RandomPlayer(seed), '-', fen=fen, clock='free')
+                self.assertEqual((g.result, g.reason), ('1-0', 'checkmated'), (fen, seed))
+
+    def test_eval_is_color_symmetric(self):
+        rng = random.Random(0)
+        for _ in range(200):
+            board = chess.Board()
+            for _ in range(rng.randrange(120)):
+                moves = list(board.legal_moves)
+                if not moves:
+                    break
+                board.push(rng.choice(moves))
+            self.assertEqual(evaluate(board), evaluate(board.mirror()), board.fen())
 
     def test_search_wins_material(self):
         board = chess.Board('4k3/8/8/3q4/8/8/8/3QK3 w - - 0 1')  # the black king cannot recapture
