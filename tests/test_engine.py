@@ -81,6 +81,40 @@ class RulesTest(unittest.TestCase):
         g.play('Ra2')
         self.assertEqual(g.reason, '50move')
 
+    def test_chesscom_insufficient_material(self):
+        for fen, move in [('8/b7/2k5/2N5/1pK5/8/8/8 w - - 0 73', 'Kxb4'),        # KN v KB
+                          ('8/8/8/3k4/8/8/2n5/R1N1K3 b - - 0 60', 'Nxa1'),      # KN v KN
+                          ('8/8/8/3k4/8/2b5/8/R2B3K b - - 0 60', 'Bxa1'),       # KB v KB, opposite colors
+                          ('8/8/8/3k4/8/8/4p3/2N1KN2 w - - 0 60', 'Kxe2')]:     # KNN v K
+            g = Game(fen=fen)
+            g.play(move)
+            self.assertEqual((g.result, g.reason), ('1/2-1/2', 'insufficient'), fen)
+            g = Game(fen=fen, auto_draw=False)  # FIDE: a helpmate exists, so play on
+            g.play(move)
+            self.assertFalse(g.is_over, fen)
+        g = Game(fen='8/8/8/3k4/8/8/4p3/2NBK3 w - - 0 60')  # KBN v K can be forced: play on
+        g.play('Kxe2')
+        self.assertFalse(g.is_over)
+
+    @unittest.skipUnless(glob.glob('data/players/hydra33092/[0-9]*.json'), 'needs local archive')
+    def test_archived_games_end_exactly_when_chesscom_ended_them(self):
+        insufficient = 0
+        for path in sorted(glob.glob('data/players/hydra33092/[0-9]*.json')):
+            with open(path) as f:
+                games = json.load(f)['games']
+            for data in games:
+                if data['rules'] != 'chess' or '/' in data['time_control']:
+                    continue
+                g = Game(fen=data['initial_setup'])
+                moves = tcn.decode(data['tcn'])
+                for i, move in enumerate(moves):
+                    self.assertFalse(g.is_over, f"{data['url']} ended early at ply {i}: {g.reason}")
+                    g.play(tcn.legalize(g.board, move))
+                if data['white']['result'] == 'insufficient':
+                    self.assertEqual(g.reason, 'insufficient', data['url'])
+                    insufficient += 1
+        self.assertGreater(insufficient, 40)
+
     def test_insufficient_material(self):
         g = Game(fen='4k3/8/8/8/8/8/3r4/3BK3 w - - 0 1')
         g.play('Kxd2')

@@ -86,6 +86,23 @@ def parse_clocks(pgn):
     return [int(h) * 3600 + int(m) * 60 + float(s) for h, m, s in _CLOCK.findall(pgn)]
 
 
+def chesscom_insufficient(board):
+    """Chess.com's automatic insufficient-material draw (since 2019).
+
+    Beyond python-chess's dead positions, chess.com also ends games where
+    neither side has a pawn, rook or queen and each has at most one minor
+    piece (KB v KN, KN v KN, KB v KB on either colors), and KNN v K. Mates
+    there need the loser's help, so FIDE rules play on.
+    """
+    if board.pawns | board.rooks | board.queens:
+        return False
+    minors = {c: chess.popcount(board.occupied_co[c] & (board.knights | board.bishops)) for c in chess.COLORS}
+    if max(minors.values()) <= 1:
+        return True
+    return any(minors[c] == 2 == chess.popcount(board.occupied_co[c] & board.knights) and minors[not c] == 0
+               for c in chess.COLORS)
+
+
 class Game:
     """One game. `play` is the only way moves enter, so every rule is enforced.
 
@@ -227,7 +244,7 @@ class Game:
             self._finish(not b.turn, 'checkmated')
         elif b.is_stalemate():
             self._finish(None, 'stalemate')
-        elif b.is_insufficient_material():
+        elif b.is_insufficient_material() or (self.auto_draw and chesscom_insufficient(b)):
             self._finish(None, 'insufficient')
         elif b.is_fivefold_repetition() or (self.auto_draw and b.is_repetition(3)):
             self._finish(None, 'repetition')
