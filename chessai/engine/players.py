@@ -99,8 +99,13 @@ class StockfishPlayer(Player):
         self.engine.quit()
 
 
-REGISTRY = {'random': RandomPlayer, 'human': HumanPlayer,
-            'alphabeta': AlphaBetaPlayer, 'stockfish': StockfishPlayer}
+def _model_player(**kwargs):
+    from ..models.player import ModelPlayer  # imports torch, so only when asked for
+    return ModelPlayer(**kwargs)
+
+
+REGISTRY = {'random': RandomPlayer, 'human': HumanPlayer, 'alphabeta': AlphaBetaPlayer,
+            'stockfish': StockfishPlayer, 'model': _model_player}
 
 
 def from_spec(spec):

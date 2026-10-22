@@ -55,6 +55,24 @@ def _flip(pieces):
     return np.where(flipped == 0, 0, np.where(flipped <= 6, flipped + 6, flipped - 6)).astype(np.uint8)
 
 
+def stack_planes(rows, earlier):
+    """Planes for `rows` followed by 12 piece planes per earlier position.
+
+    earlier[k] = (rows k+1 plies back, bool valid mask). Earlier boards are
+    re-oriented to the current mover; invalid ones become zero planes.
+    """
+    stack = [encoding.board_planes(unpack_pieces(rows['pieces']), rows['castling'], rows['ep'])]
+    n = len(rows)
+    for back, (prev, valid) in enumerate(earlier, 1):
+        pieces = unpack_pieces(prev['pieces'])
+        if back % 2:
+            pieces = _flip(pieces)
+        p = encoding.board_planes(pieces, np.zeros(n, np.uint8), np.full(n, encoding.NO_EP, np.uint8))[:, :12]
+        p[~np.asarray(valid, bool)] = 0
+        stack.append(p)
+    return np.concatenate(stack, axis=1)
+
+
 class PositionDataset:
     def __init__(self, root, in_memory=False):
         """in_memory=True reads every shard into RAM (bulk is ~10 GB); otherwise
@@ -127,19 +145,12 @@ class PositionDataset:
         """
         idx = np.asarray(idx)
         rows = self.rows(idx)
-        stack = [encoding.board_planes(unpack_pieces(rows['pieces']), rows['castling'], rows['ep'])]
+        earlier = []
         for back in range(1, history + 1):
-            prev_idx = np.maximum(idx - back, 0)
-            prev = self.rows(prev_idx)
+            prev = self.rows(np.maximum(idx - back, 0))
             valid = (prev['game'] == rows['game']) & (prev['ply'] == rows['ply'] - back) & (idx >= back)
-            pieces = unpack_pieces(prev['pieces'])
-            if back % 2:
-                pieces = _flip(pieces)
-            p = encoding.board_planes(pieces, np.zeros(len(idx), np.uint8),
-                                      np.full(len(idx), encoding.NO_EP, np.uint8))[:, :12]
-            p[~valid] = 0
-            stack.append(p)
-        return np.concatenate(stack, axis=1)
+            earlier.append((prev, valid))
+        return stack_planes(rows, earlier)
 
     def batch(self, idx, history=0):
         idx = np.sort(np.asarray(idx))  # sorted reads are much faster on memmaps

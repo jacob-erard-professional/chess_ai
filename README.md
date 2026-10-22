@@ -122,3 +122,19 @@ for b in ds.torch_batches(idx, 1024, shuffle=True, history=2):
 ```
 
 `history=k` adds the previous k positions (re-oriented to the current mover). `where=` filters on any row column (e.g. `lambda r: r['time_class'] == 0` for bullet). Outputs live under `data/datasets/` and are not committed.
+
+## Models (`chessai.models`)
+
+The headline metric is **move match**: how often the model plays exactly the move Hydra33092 played, measured on the newest 10% of games, which are never trained on.
+
+```sh
+.venv/bin/python -m chessai.models.baselines                     # most-common-move and Stockfish-best baselines
+.venv/bin/python -m chessai.models.train --data data/datasets/bulk --in-memory --out runs/base \
+    --steps 60000 --eval data/datasets/hydra                      # general human model
+.venv/bin/python -m chessai.models.train --data data/datasets/hydra --target-only \
+    --init runs/base/best.pt --out runs/hydra --steps 20000 --lr 3e-4   # fine-tune on your moves
+.venv/bin/python -m chessai.models.train --evaluate runs/hydra/best.pt --data data/datasets/hydra --split test
+.venv/bin/python -m chessai.engine.play --white human --black model:path=runs/hydra/best.pt,temperature=1
+```
+
+`PolicyNet` (`chessai/models/net.py`) is a residual conv net (6×64 by default). Ratings, clocks and time control are broadcast in as extra input planes. It has three heads: move (1,858 logits), result (loss/draw/win) and log seconds spent. `chessai/models/inputs.py` builds live-game inputs through the same code as the dataset; a test checks they match the training rows exactly. `ModelPlayer.top_moves(game)` lists the predicted moves with their probabilities. Training runs on CUDA, MPS or CPU, chosen automatically (`--device` to override). Checkpoints and logs go to `runs/`, which is not committed.
