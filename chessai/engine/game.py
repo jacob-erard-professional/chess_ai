@@ -180,9 +180,16 @@ class Game:
         return move
 
     def flag(self, color):
-        """`color` ran out of time."""
+        """`color` ran out of time.
+
+        Chess.com draws when the opponent has only a lone king or king plus one
+        minor piece, even if a helpmate exists (python-chess's
+        has_insufficient_material would call those wins).
+        """
         self.clocks[color] = 0.0
-        if self.board.has_insufficient_material(not color):
+        b = self.board
+        occ = b.occupied_co[not color]
+        if not occ & (b.pawns | b.rooks | b.queens) and chess.popcount(occ & (b.knights | b.bishops)) <= 1:
             self._finish(None, 'timevsinsufficient')
         else:
             self._finish(not color, 'timeout')

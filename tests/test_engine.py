@@ -104,6 +104,33 @@ class ClockTest(unittest.TestCase):
         g.play('Qa2', elapsed=11)
         self.assertEqual((g.result, g.reason), ('1/2-1/2', 'timevsinsufficient'))
 
+    def test_timeout_vs_lone_minor_is_a_draw_even_if_helpmate_exists(self):
+        # chess.com game 73455581879: Black flags, White has K+B (Black has a rook and knight).
+        g = Game(fen='8/7p/4p2k/6p1/1B1K4/8/r7/3n4 b - - 3 43', time_control='10+0')
+        g.flag(chess.BLACK)
+        self.assertEqual((g.result, g.reason), ('1/2-1/2', 'timevsinsufficient'))
+        g = Game(fen='8/7p/4p2k/6p1/1B1K4/8/r7/3n4 b - - 3 43', time_control='10+0')
+        g.flag(chess.WHITE)  # Black has R+N+pawns: a win
+        self.assertEqual((g.result, g.reason), ('0-1', 'timeout'))
+
+    @unittest.skipUnless(glob.glob('data/players/hydra33092/[0-9]*.json'), 'needs local archive')
+    def test_archived_timeouts_recompute_through_flag(self):
+        checked = 0
+        for path in sorted(glob.glob('data/players/hydra33092/[0-9]*.json')):
+            with open(path) as f:
+                games = json.load(f)['games']
+            for data in games:
+                codes = (data['white']['result'], data['black']['result'])
+                if data['rules'] != 'chess' or '/' in data['time_control'] \
+                        or not {'timeout', 'timevsinsufficient'} & set(codes):
+                    continue
+                g = Game.from_chesscom(data)
+                g.result = g.reason = g.winner = None
+                g.flag(g.board.turn)  # the side to move is the one whose clock ran out
+                self.assertEqual((g.player_result(chess.WHITE), g.player_result(chess.BLACK)), codes, data['url'])
+                checked += 1
+        self.assertGreater(checked, 5000)
+
     def test_time_control_parsing(self):
         self.assertEqual(TimeControl.parse('180+2'), TimeControl(180, 2))
         self.assertEqual(TimeControl.parse('60').time_class, 'bullet')
