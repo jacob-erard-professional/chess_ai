@@ -90,7 +90,8 @@ class AlphaBetaPlayer(Player):
 
 
 class StockfishPlayer(Player):
-    """Stockfish at full strength or limited with UCI_Elo (1320-3190)."""
+    """Stockfish at full strength, or limited with elo= within the engine's
+    UCI_Elo range (1320-3190 for Stockfish 16-19)."""
 
     def __init__(self, elo=None, depth=None, time=0.1, path=None):
         path = path or shutil.which('stockfish')
@@ -98,6 +99,10 @@ class StockfishPlayer(Player):
             raise RuntimeError('stockfish not found on PATH (brew install stockfish)')
         self.engine = chess.engine.SimpleEngine.popen_uci(path)
         if elo:
+            option = self.engine.options['UCI_Elo']
+            if not option.min <= int(elo) <= option.max:
+                self.engine.quit()
+                raise ValueError(f'stockfish elo must be {option.min}-{option.max}, got {elo}')
             self.engine.configure({'UCI_LimitStrength': True, 'UCI_Elo': int(elo)})
         self.limit = chess.engine.Limit(depth=int(depth)) if depth else chess.engine.Limit(time=float(time))
         self.name = f'stockfish-{elo}' if elo else 'stockfish'

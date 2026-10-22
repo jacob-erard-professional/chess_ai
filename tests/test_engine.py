@@ -1,13 +1,14 @@
 import glob
 import json
 import random
+import shutil
 import time
 import unittest
 
 import chess
 
 from chessai.engine import (AlphaBetaPlayer, Game, GameOver, IllegalMove, PlayerInfo,
-                            RandomPlayer, TimeControl, play_game, tcn)
+                            RandomPlayer, StockfishPlayer, TimeControl, play_game, tcn)
 from chessai.engine.game import format_clock, parse_clocks
 from chessai.engine.search import MATE, Searcher, evaluate
 
@@ -260,6 +261,16 @@ class PlayersTest(unittest.TestCase):
         searcher.search(chess.Board())
         self.assertGreater(searcher.depth_reached, AlphaBetaPlayer.DEFAULT_DEPTH)
         self.assertEqual(AlphaBetaPlayer(depth=2).name, 'alphabeta-d2')
+
+    @unittest.skipUnless(shutil.which('stockfish'), 'needs stockfish')
+    def test_stockfish_elo_is_validated(self):
+        for elo in (1000, 4000):
+            with self.assertRaisesRegex(ValueError, '1320-3190'):
+                StockfishPlayer(elo=elo)
+        for elo in (1320, 3190):
+            player = StockfishPlayer(elo=elo, depth=1)
+            self.assertIn(player.choose_move(Game()), Game().legal_moves())
+            player.close()
 
     def test_search_without_legal_moves(self):
         self.assertEqual(Searcher(2).search(chess.Board('7k/5QQ1/8/8/8/8/8/K7 b - - 0 1')), (None, -MATE))
