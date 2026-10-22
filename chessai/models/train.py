@@ -38,16 +38,25 @@ def to_device(batch, device):
 
 
 def prefetch(iterator, depth=4):
-    """Build numpy batches on a background thread while the GPU trains."""
+    """Build numpy batches on a background thread while the GPU trains.
+
+    An exception in the reader thread is re-raised here, so training fails
+    instead of waiting forever for the next batch.
+    """
     q = queue.Queue(depth)
     done = object()
 
     def run():
-        for item in iterator:
-            q.put(item)
-        q.put(done)
+        try:
+            for item in iterator:
+                q.put(item)
+            q.put(done)
+        except BaseException as e:
+            q.put(e)
     threading.Thread(target=run, daemon=True).start()
     while (item := q.get()) is not done:
+        if isinstance(item, BaseException):
+            raise item
         yield item
 
 
@@ -108,6 +117,16 @@ def eval_indices(ds, split, limit, seed=0):
     return idx
 
 
+def eval_names(paths):
+    """{resolved path: log name}: the folder name, or the full path if two
+    different datasets share a folder name. Repeated paths appear once."""
+    resolved = list(dict.fromkeys(Path(p).resolve() for p in paths))
+    counts = {}
+    for path in resolved:
+        counts[path.name] = counts.get(path.name, 0) + 1
+    return {path: path.name if counts[path.name] == 1 else str(path) for path in resolved}
+
+
 def time_class_filter(name):
     if not name:
         return None
@@ -120,10 +139,12 @@ def train(args):
     ds = PositionDataset(args.data, in_memory=args.in_memory)
     train_idx = ds.select('train', target=True if args.target_only else None,
                           where=time_class_filter(args.time_class))
+    names = eval_names([args.data] + args.eval)
     evals = {}
-    for path in [args.data] + args.eval:
-        eds = ds if Path(path) == Path(args.data) else PositionDataset(path)
-        evals[Path(path).name] = (eds, eval_indices(eds, 'val', args.eval_rows))
+    for path, name in names.items():
+        eds = ds if path == Path(args.data).resolve() else PositionDataset(path)
+        evals[name] = (eds, eval_indices(eds, 'val', args.eval_rows))
+    primary = names[Path(args.data).resolve()]
 
     if args.init:
         model, _ = net.load(args.init, device)
@@ -131,7 +152,7 @@ def train(args):
     else:
         model = net.PolicyNet(history=args.history, blocks=args.blocks, channels=args.channels).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    warmup = min(1000, args.steps // 10)
+    warmup = max(1, min(1000, args.steps // 10))
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1, (s + 1) / warmup) *
                                               0.5 * (1 + math.cos(math.pi * min(s, args.steps) / args.steps)))
     out = Path(args.out)
@@ -164,7 +185,7 @@ def train(args):
             print(json.dumps(record), flush=True)
             log.write(json.dumps(record) + '\n')
             log.flush()
-            score = record[Path(args.data).name]['top1']
+            score = record[primary]['top1']
             net.save(model, out / 'last.pt', step=step, args=vars(args))
             if score > best:
                 best = score

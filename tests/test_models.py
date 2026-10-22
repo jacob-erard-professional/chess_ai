@@ -1,5 +1,6 @@
 import json
 import random
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,7 @@ from chessai.engine import Game, PlayerInfo, play_game, RandomPlayer
 from chessai.models import net
 from chessai.models.inputs import game_inputs
 from chessai.models.player import ModelPlayer
+from chessai.models.train import eval_names, prefetch
 
 
 def random_game(seed, plies=50):
@@ -74,6 +76,32 @@ class ModelTest(unittest.TestCase):
         game = play_game(player, RandomPlayer(seed=1), '60+0', clock='free', max_plies=40)
         self.assertGreater(len(game.moves), 0)
         self.assertEqual(len(player.top_moves(Game(), 3)), 3)
+
+    def test_tiny_runs_and_same_named_eval_datasets(self):
+        # --steps under 10 used to divide by zero in the warmup; a second eval
+        # dataset with the same folder name used to overwrite the first.
+        other = Path(self.tmp.name) / 'other' / self.ds.root.name
+        shutil.copytree(self.ds.root, other)
+        out = Path(self.tmp.name) / 'tiny'
+        subprocess.run([sys.executable, '-m', 'chessai.models.train', '--data', str(self.ds.root), '--out', str(out),
+                        '--steps', '5', '--batch', '16', '--blocks', '1', '--channels', '8', '--eval', str(other),
+                        '--eval', str(self.ds.root), '--device', 'cpu'], check=True, capture_output=True)
+        record = json.loads((out / 'log.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(sorted(k for k in record if k not in ('step', 'time')),
+                         sorted([str(self.ds.root.resolve()), str(other.resolve())]))
+        self.assertTrue((out / 'best.pt').exists())
+
+    def test_prefetch_reraises_reader_errors(self):
+        def broken():
+            yield 1
+            raise RuntimeError('reader broke')
+        with self.assertRaisesRegex(RuntimeError, 'reader broke'):
+            for _ in prefetch(broken()):
+                pass
+
+    def test_eval_names(self):
+        names = eval_names(['a/hydra', 'b/bulk', 'a/hydra'])
+        self.assertEqual(list(names.values()), ['hydra', 'bulk'])
 
 
 if __name__ == '__main__':
