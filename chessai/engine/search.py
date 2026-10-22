@@ -137,6 +137,7 @@ class Searcher:
         self.max_depth = max_depth
         self.time_limit = time_limit
         self.nodes = 0
+        self.deadline = None
 
     def _ordered(self, board, moves, first=None):
         def key(m):
@@ -153,15 +154,24 @@ class Searcher:
         if self.deadline and self.nodes % 1024 == 0 and time.monotonic() > self.deadline:
             raise _Timeout
 
-    def quiesce(self, board, alpha, beta):
+    def quiesce(self, board, alpha, beta, ply):
+        """Captures only, until quiet. In check, every evasion is searched and
+        there is no stand-pat, so mates at the horizon are seen."""
         self._tick()
-        stand = evaluate(board)
-        if stand >= beta:
-            return beta
-        alpha = max(alpha, stand)
-        for move in self._ordered(board, [m for m in board.legal_moves if board.is_capture(m)]):
+        in_check = board.is_check()
+        if not any(board.generate_legal_moves()):
+            return -MATE + ply if in_check else 0
+        if in_check:
+            moves = list(board.legal_moves)
+        else:
+            stand = evaluate(board)
+            if stand >= beta:
+                return beta
+            alpha = max(alpha, stand)
+            moves = [m for m in board.legal_moves if board.is_capture(m)]
+        for move in self._ordered(board, moves):
             board.push(move)
-            score = -self.quiesce(board, -beta, -alpha)
+            score = -self.quiesce(board, -beta, -alpha, ply + 1)
             board.pop()
             if score >= beta:
                 return beta
@@ -176,7 +186,7 @@ class Searcher:
                 or board.halfmove_clock >= 100:
             return 0
         if depth == 0:
-            return self.quiesce(board, alpha, beta)
+            return self.quiesce(board, alpha, beta, ply)
         for move in self._ordered(board, board.legal_moves):
             board.push(move)
             score = -self.negamax(board, depth - 1, -beta, -alpha, ply + 1)

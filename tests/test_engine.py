@@ -205,6 +205,17 @@ class PlayersTest(unittest.TestCase):
         move, score = Searcher(3).search(board.mirror())
         self.assertEqual(score, MATE - 3)
 
+    def test_quiescence_sees_mate_at_the_horizon(self):
+        # Rxa7?? Qxg2#: depth 1 must see the reply mate inside quiescence.
+        board = chess.Board('6rk/r7/6q1/8/8/8/5PPP/R5K1 w - - 0 1')
+        move, score = Searcher(1).search(board)
+        self.assertNotEqual(move.uci(), 'a1a7')
+        self.assertGreater(score, -MATE + 100)
+
+    def test_quiescence_scores_stalemate_as_draw(self):
+        # Black to move is stalemated: quiescence must not return the material eval.
+        self.assertEqual(Searcher(1).quiesce(chess.Board('k7/2Q5/1K6/8/8/8/8/8 b - - 0 1'), -MATE, MATE, 0), 0)
+
     def test_converts_basic_endgames_against_random_defence(self):
         for fen in ('7k/8/8/8/8/8/8/K5Q1 w - - 0 1', 'k7/8/8/8/8/8/8/3QK3 w - - 0 1',
                     '7k/8/8/8/8/8/8/K5R1 w - - 0 1', '8/8/3k4/8/8/8/8/R3K3 w - - 0 1'):
