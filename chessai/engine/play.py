@@ -1,6 +1,6 @@
 """Play games between any two players and record them in chess.com format.
 
-    python -m chessai.engine.play --white human --black alphabeta:depth=3 --tc 180+2
+    python -m chessai.engine.play --white human --black alphabeta --tc 180+2
     python -m chessai.engine.play --white stockfish:elo=1500 --black random --games 10
 
 Games are appended to data/played/YYYY-MM.json as {"games": [...]}, the same
@@ -65,7 +65,7 @@ def save_game(record, out=DEFAULT_OUT):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--white', default='human')
-    ap.add_argument('--black', default='alphabeta:depth=3')
+    ap.add_argument('--black', default='alphabeta')
     ap.add_argument('--tc', default='180+0', help="e.g. 60+1, 180+2, or '-' for untimed")
     ap.add_argument('--fen', default=chess.STARTING_FEN)
     ap.add_argument('--games', type=int, default=1)

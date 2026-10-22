@@ -1,6 +1,7 @@
 import glob
 import json
 import random
+import time
 import unittest
 
 import chess
@@ -215,6 +216,16 @@ class PlayersTest(unittest.TestCase):
     def test_quiescence_scores_stalemate_as_draw(self):
         # Black to move is stalemated: quiescence must not return the material eval.
         self.assertEqual(Searcher(1).quiesce(chess.Board('k7/2Q5/1K6/8/8/8/8/8 b - - 0 1'), -MATE, MATE, 0), 0)
+
+    def test_time_budget_deepens_past_default_depth(self):
+        player = AlphaBetaPlayer(time=1.5)
+        started = time.monotonic()
+        player.choose_move(Game(time_control='-'))
+        self.assertGreater(time.monotonic() - started, 1.0)
+        searcher = Searcher(AlphaBetaPlayer.TIMED_MAX_DEPTH, 1.5)
+        searcher.search(chess.Board())
+        self.assertGreater(searcher.depth_reached, AlphaBetaPlayer.DEFAULT_DEPTH)
+        self.assertEqual(AlphaBetaPlayer(depth=2).name, 'alphabeta-d2')
 
     def test_search_without_legal_moves(self):
         self.assertEqual(Searcher(2).search(chess.Board('7k/5QQ1/8/8/8/8/8/K7 b - - 0 1')), (None, -MATE))

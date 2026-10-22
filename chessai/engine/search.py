@@ -138,6 +138,7 @@ class Searcher:
         self.time_limit = time_limit
         self.nodes = 0
         self.deadline = None
+        self.depth_reached = 0
 
     def _ordered(self, board, moves, first=None):
         def key(m):
@@ -221,6 +222,7 @@ class Searcher:
             except _Timeout:
                 break
             best, best_score = iter_best, alpha
+            self.depth_reached = depth
             if abs(alpha) >= MATE - 100:
                 break
         return best, best_score

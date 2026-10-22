@@ -65,17 +65,27 @@ class HumanPlayer(Player):
 
 
 class AlphaBetaPlayer(Player):
-    """The classical searcher in search.py. Uses ~1/30 of the clock when timed."""
+    """The classical searcher in search.py.
 
-    def __init__(self, depth=4, time=None):
-        self.depth, self.time = int(depth), float(time) if time else None
-        self.name = f'alphabeta-d{self.depth}'
+    time=SECONDS per move, or ~1/30 of the clock in timed games. With a time
+    budget and no explicit depth, it deepens until the time runs out;
+    otherwise it searches to `depth` (default 4).
+    """
+    DEFAULT_DEPTH = 4
+    TIMED_MAX_DEPTH = 64
+
+    def __init__(self, depth=None, time=None):
+        self.depth = int(depth) if depth else None
+        self.time = float(time) if time else None
+        self.name = f'alphabeta-d{self.depth}' if self.depth else \
+            f'alphabeta-t{self.time:g}' if self.time else 'alphabeta'
 
     def choose_move(self, game):
         budget = self.time
         if game.time_control and budget is None:
             budget = game.clocks[game.turn] / 30 + game.time_control.increment * 0.8
-        move, _ = Searcher(self.depth, budget).search(game.board)
+        depth = self.depth or (self.TIMED_MAX_DEPTH if budget else self.DEFAULT_DEPTH)
+        move, _ = Searcher(depth, budget).search(game.board)
         return move
 
 

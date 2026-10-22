@@ -91,10 +91,10 @@ Setup: `uv venv --python 3.13 .venv && uv pip install --python .venv/bin/python 
 
 **Engine** (`chessai.engine`). `Game` applies every standard rule (python-chess move generation; castling, en passant, under/promotion) plus the game layer: clocks with increment, flagging (`timevsinsufficient` when the opponent cannot mate), resignation, agreement, abandonment, stalemate, insufficient material, and repetition / 50-move draws. `auto_draw=True` (default) ends threefold and 50-move draws immediately, like chess.com; `auto_draw=False` requires `claim_draw()` and only fivefold / 75-move are automatic (FIDE). `Game.to_chesscom()` emits the same JSON as `data/` (PGN with `%clk`, TCN, result codes, termination text); `Game.from_chesscom()` replays any stored game. All 12,786 standard Hydra33092 games reproduce their PGN moves, clocks, TCN, results and termination exactly.
 
-Players implement `choose_move(game) -> Move | RESIGN` and see the whole game (clocks, ratings, history): `human`, `random`, `alphabeta` (negamax, iterative deepening, quiescence, piece-square eval; `chessai/engine/search.py`), `stockfish` (optionally `elo=` 1320–3190).
+Players implement `choose_move(game) -> Move | RESIGN` and see the whole game (clocks, ratings, history): `human`, `random`, `alphabeta` (negamax, iterative deepening, quiescence, piece-square eval with endgame mop-up; `chessai/engine/search.py`; `time=` seconds per move or ~1/30 of the clock when timed, deepening until time runs out, or a fixed `depth=`, default 4 when untimed), `stockfish` (optionally `elo=` 1320–3190).
 
 ```sh
-.venv/bin/python -m chessai.engine.play --white human --black alphabeta:depth=4 --tc 180+2
+.venv/bin/python -m chessai.engine.play --white human --black alphabeta --tc 180+2
 .venv/bin/python -m chessai.engine.play --white stockfish:elo=1500 --black alphabeta:time=0.5 --games 20 --swap
 ```
 
