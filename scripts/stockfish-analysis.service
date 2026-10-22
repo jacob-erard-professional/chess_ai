@@ -1,0 +1,17 @@
+[Unit]
+Description=Hydra33092 resumable Stockfish analysis
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/chess_ai
+ExecStart=%h/projects/chess_ai/.venv/bin/python -u %h/projects/chess_ai/scripts/analyze_games.py --engine %h/.local/opt/stockfish-19/stockfish/stockfish-linux-x86-64-universal --workers 8 --source %h/projects/chess_ai/data/players/hydra33092 --output %h/projects/chess_ai/data/analysis/hydra33092
+Nice=5
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=60
+KillMode=control-group
+
+[Install]
+WantedBy=default.target
