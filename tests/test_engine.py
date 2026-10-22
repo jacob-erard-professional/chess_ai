@@ -216,6 +216,10 @@ class PlayersTest(unittest.TestCase):
         # Black to move is stalemated: quiescence must not return the material eval.
         self.assertEqual(Searcher(1).quiesce(chess.Board('k7/2Q5/1K6/8/8/8/8/8 b - - 0 1'), -MATE, MATE, 0), 0)
 
+    def test_search_without_legal_moves(self):
+        self.assertEqual(Searcher(2).search(chess.Board('7k/5QQ1/8/8/8/8/8/K7 b - - 0 1')), (None, -MATE))
+        self.assertEqual(Searcher(2).search(chess.Board('k7/2Q5/1K6/8/8/8/8/8 b - - 0 1')), (None, 0))
+
     def test_converts_basic_endgames_against_random_defence(self):
         for fen in ('7k/8/8/8/8/8/8/K5Q1 w - - 0 1', 'k7/8/8/8/8/8/8/3QK3 w - - 0 1',
                     '7k/8/8/8/8/8/8/K5R1 w - - 0 1', '8/8/3k4/8/8/8/8/R3K3 w - - 0 1'):

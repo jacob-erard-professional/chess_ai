@@ -197,11 +197,17 @@ class Searcher:
         return alpha
 
     def search(self, board):
-        """Best (move, score) found within max_depth and time_limit."""
+        """Best (move, score) found within max_depth and time_limit.
+
+        With no legal moves the result is (None, -MATE) when checkmated and
+        (None, 0) when stalemated.
+        """
         board = board.copy()
         self.nodes = 0
         self.deadline = time.monotonic() + self.time_limit if self.time_limit else None
         moves = list(board.legal_moves)
+        if not moves:
+            return None, -MATE if board.is_check() else 0
         best, best_score = moves[0], None
         for depth in range(1, self.max_depth + 1):
             try:
