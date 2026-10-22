@@ -7,7 +7,7 @@ import numpy as np
 
 from .. import encoding
 from ..engine import tcn
-from ..engine.game import TimeControl, parse_clocks
+from ..engine.game import DRAW_CODES, TimeControl, parse_clocks
 from .schema import (NO_EVAL, NO_MOVE, ROW, TEST, TIME_CLASSES, TRAIN, UNKNOWN_CLASS, VAL,
                      pack_pieces)
 
@@ -26,7 +26,13 @@ def hash_split(game_id, val=5, test=5):
 
 def game_result(data):
     w, b = data['white'].get('result'), data['black'].get('result')
-    return '1-0' if w == 'win' else '0-1' if b == 'win' else '1/2-1/2'
+    if w == 'win':
+        return '1-0'
+    if b == 'win':
+        return '0-1'
+    if w == b and w in DRAW_CODES:
+        return '1/2-1/2'
+    raise Skip(f'unknown result: {w}/{b}')
 
 
 def game_meta(data):

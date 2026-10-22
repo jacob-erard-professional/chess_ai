@@ -10,7 +10,7 @@ import chess
 import numpy as np
 
 from chessai import encoding
-from chessai.dataset.extract import extract
+from chessai.dataset.extract import Skip, extract
 from chessai.dataset.reader import PositionDataset, _flip, features
 from chessai.dataset.schema import pack_pieces, unpack_pieces
 from chessai.engine import Game, PlayerInfo
@@ -92,6 +92,14 @@ class ExtractTest(unittest.TestCase):
         self.assertEqual(rows['clock'][0], 60)
         self.assertTrue((rows['game'] == 7).all())
         self.assertEqual(set(rows['result'][rows['is_target'] == 1]), {1})  # black resigned
+
+    def test_unknown_result_codes_are_skipped_not_drawn(self):
+        record = random_game(2).to_chesscom()
+        record['white']['result'] = record['black']['result'] = 'kingofthehill'
+        with self.assertRaisesRegex(Skip, 'unknown result'):
+            extract(record, 0, 0)
+        record['white']['result'], record['black']['result'] = 'agreed', 'agreed'
+        self.assertEqual(set(extract(record, 0, 0)[0]['result']), {0})
 
     def test_repetition_counter(self):
         g = Game(auto_draw=False)
