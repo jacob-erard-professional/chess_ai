@@ -84,3 +84,41 @@ rsync -a --include='*.jsonl' --include='progress.json' --exclude='*' pc:projects
 ```
 
 Stop the remote service before copying the live SQLite database back. Copying an active WAL database without its current WAL is not a consistent snapshot. Individual JSONL exports are atomically replaced on the PC and can be retrieved while analysis continues.
+
+## Engine and training data (`chessai/`)
+
+Setup: `uv venv --python 3.13 .venv && uv pip install --python .venv/bin/python -r requirements.txt` (`brew install stockfish` for the Stockfish player). Tests: `.venv/bin/python -m unittest discover -s tests -t .`
+
+**Engine** (`chessai.engine`). `Game` applies every standard rule (python-chess move generation; castling, en passant, under/promotion) plus the game layer: clocks with increment, flagging (`timevsinsufficient` when the opponent cannot mate), resignation, agreement, abandonment, stalemate, insufficient material, and repetition / 50-move draws. `auto_draw=True` (default) ends threefold and 50-move draws immediately, like chess.com; `auto_draw=False` requires `claim_draw()` and only fivefold / 75-move are automatic (FIDE). `Game.to_chesscom()` emits the same JSON as `data/` (PGN with `%clk`, TCN, result codes, termination text); `Game.from_chesscom()` replays any stored game. All 12,786 standard Hydra33092 games reproduce their PGN moves, clocks, TCN, results and termination exactly.
+
+Players implement `choose_move(game) -> Move | RESIGN` and see the whole game (clocks, ratings, history): `human`, `random`, `alphabeta` (negamax, iterative deepening, quiescence, piece-square eval; `chessai/engine/search.py`), `stockfish` (optionally `elo=` 1320–3190).
+
+```sh
+.venv/bin/python -m chessai.engine.play --white human --black alphabeta:depth=4 --tc 180+2
+.venv/bin/python -m chessai.engine.play --white stockfish:elo=1500 --black alphabeta:time=0.5 --games 20 --swap
+```
+
+Games are appended to `data/played/YYYY-MM.json` in the monthly-archive layout, so they feed the dataset builder unchanged.
+
+**Encoding** (`chessai.encoding`, the single source for every model). Positions are from the side to move's view (Black's positions are mirrored and colors swapped). Board: 64 piece codes → 17 planes (12 pieces, 4 castling, en passant). Moves: a fixed 1,858-entry vocabulary (queen/knight-reachable from→to plus underpromotions). `ENCODING_VERSION` is stamped into every dataset; the reader refuses mismatches.
+
+**Datasets** (`chessai.dataset`). One row per played move (`chessai/dataset/schema.py`): packed board, castling, en passant, 50-move counter, repetition count, move index, both ratings, both clocks, time spent, time control, final result for the mover, `is_target`, split, game index, and Stockfish evals when joined. A game's rows are contiguous and never span shards.
+
+```sh
+# Your games. Time split: oldest 85% train, 5% val, newest 10% test.
+.venv/bin/python -m chessai.dataset.build archive data/players/hydra33092 --target hydra33092 --out data/datasets/hydra --legal
+# Join Stockfish analysis (rerun as the PC analysis progresses; rows are verified against FEN + move).
+.venv/bin/python -m chessai.dataset.evals data/datasets/hydra data/analysis/hydra33092/positions.jsonl
+# The rating dataset: read-only SQLite access, hash split 90/5/5, Hydra33092's games excluded so they never leak into pretraining.
+.venv/bin/python -m chessai.dataset.build bulk data/games.sqlite3 --exclude hydra33092 --out data/datasets/bulk
+```
+
+```python
+from chessai.dataset.reader import PositionDataset
+ds = PositionDataset('data/datasets/hydra')
+idx = ds.select('train', target=True)                 # Hydra33092's own moves
+for b in ds.torch_batches(idx, 1024, shuffle=True, history=2):
+    b['planes'], b['features'], b['move'], b['legal']  # (B,41,8,8), (B,16), (B,), (B,1858)
+```
+
+`history=k` adds the previous k positions (re-oriented to the current mover). `where=` filters on any row column (e.g. `lambda r: r['time_class'] == 0` for bullet). Outputs live under `data/datasets/` and are not committed.

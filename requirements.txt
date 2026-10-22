@@ -1,0 +1,3 @@
+python-chess==1.999
+numpy
+torch
