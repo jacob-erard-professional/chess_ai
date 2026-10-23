@@ -7,7 +7,8 @@ needs to build the inputs without reading this package: plane layout, feature
 formulas, move vocabulary, play settings) and `fixtures.json` (positions from
 real games with the expected planes, features, legal mask and top moves from
 torch and onnxruntime). The smallest precision whose moves still agree with
-torch is kept: int8 dynamic quantisation, then fp16, then fp32.
+torch is kept: int8 weights dequantised to float32 at run time, then fp16,
+then fp32.
 """
 import argparse
 import collections
