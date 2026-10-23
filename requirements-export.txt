@@ -1,0 +1,5 @@
+# Browser export (chessai.export.web), on top of requirements.txt
+onnx
+onnxruntime
+onnxscript
+onnxconverter-common
