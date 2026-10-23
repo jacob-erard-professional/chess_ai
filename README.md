@@ -138,3 +138,15 @@ The headline metric is **move match**: how often the model plays exactly the mov
 ```
 
 `PolicyNet` (`chessai/models/net.py`) is a residual conv net (6×64 by default). Ratings, clocks and time control are broadcast in as extra input planes. It has three heads: move (1,858 logits), result (loss/draw/win) and log seconds spent. `chessai/models/inputs.py` builds live-game inputs through the same code as the dataset; a test checks they match the training rows exactly. `ModelPlayer.top_moves(game)` lists the predicted moves with their probabilities. Training runs on CUDA, MPS or CPU, chosen automatically (`--device` to override). Checkpoints and logs go to `runs/`, which is not committed.
+
+## Browser export (`chessai.export.web`)
+
+The website runs the nets in the visitor's browser with onnxruntime-web, so chess_ai publishes the models plus a versioned contract the JavaScript encoder implements and tests against. Install the extra dependencies with `uv pip install --python .venv/bin/python -r requirements-export.txt`, then:
+
+```sh
+.venv/bin/python -m chessai.export.web --model jacob=runs/hydra/best.pt --model human=runs/base/best.pt --out ../website/chess/models/
+```
+
+Per model it writes `<name>.onnx` (opset 17; inputs `planes` (1, C, 8, 8) and `features` (1, F) float32; outputs `policy` (1, 1858) logits, `value` (1, 3) loss/draw/win logits, `log_time` (1)). Weights are int8 in blocks of 32 along the input axis with the largest 1% kept in float32, dequantised to float32 at run time (5 MB per model instead of 17.5); fp16 and fp32 are tried next if int8 drifts from torch, measured as argmax agreement on 400 held-out positions with a clear best move and the NLL of the played move. The exact drift is recorded in the manifest.
+
+`manifest.json` is the contract (`contract_version`, `encoding_version`): the full move vocabulary with the mirroring and promotion rules, the plane layout, every feature with its formula, and the recommended play settings derived from the archive (time control, ratings, how to simulate clocks for an untimed web game, temperature). `fixtures.json` holds 50 positions from real Hydra33092 games (first ply, Black to move, partial castling rights, legal en passant, promotions, repetitions, long halfmove clocks) with the exact planes, features, legal-move indices and top-5 moves from torch and onnxruntime; a JS encoder that reproduces them matches training. `tests/test_export.py` round-trips the fixtures through chessai and checks the ONNX outputs against torch.
